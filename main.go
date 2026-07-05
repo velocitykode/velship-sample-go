@@ -50,21 +50,6 @@ func serve() {
 		port = "8080"
 	}
 
-	// SCENARIO-4 FAULT (revert after test): pass the health gate on first boot,
-	// then suicide post-cutover; crash instantly on every supervisor restart so
-	// the group reaches FATAL -> agent failure report -> auto-rollback. The
-	// marker lives in the release dir (cwd), so it is scoped to THIS deploy.
-	if _, err := os.Stat("crashed"); err == nil {
-		fmt.Fprintln(os.Stderr, "scenario-4: fast-crash on restart")
-		os.Exit(1)
-	}
-	_ = os.WriteFile("crashed", []byte("1"), 0o644)
-	go func() {
-		time.Sleep(20 * time.Second)
-		fmt.Fprintln(os.Stderr, "scenario-4: post-cutover suicide")
-		os.Exit(1)
-	}()
-
 	mux := http.NewServeMux()
 	// Health endpoint Caddy probes after deploy to confirm the process is live.
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -72,6 +57,12 @@ func serve() {
 		fmt.Fprintln(w, "ok")
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		// SCENARIO-4 FAULT: crash on real traffic AFTER the health gate has
+		// already passed (the gate uses a TCP/health probe, never "/"). This
+		// forces a post-cutover supervisor FATAL -> agent failure report ->
+		// auto-rollback. REVERT after the test.
+		fmt.Fprintln(os.Stderr, "scenario-4: crashing on live request post-cutover")
+		os.Exit(1)
 		fmt.Fprintf(w, "velship-sample-go up\n")
 		fmt.Fprintf(w, "APP_ENV=%s\n", os.Getenv("APP_ENV"))
 		fmt.Fprintf(w, "DB_CONNECTION=%s\n", os.Getenv("DB_CONNECTION"))
