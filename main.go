@@ -57,9 +57,12 @@ func serve() {
 		fmt.Fprintln(w, "ok")
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
-		// Surface a couple of env vars so a deploy visibly proves the .env
-		// the agent wrote (including any DB_* the engine provisioner injected)
-		// reached the running process.
+		// SCENARIO-4 FAULT: crash on real traffic AFTER the health gate has
+		// already passed (the gate uses a TCP/health probe, never "/"). This
+		// forces a post-cutover supervisor FATAL -> agent failure report ->
+		// auto-rollback. REVERT after the test.
+		fmt.Fprintln(os.Stderr, "scenario-4: crashing on live request post-cutover")
+		os.Exit(1)
 		fmt.Fprintf(w, "velship-sample-go up\n")
 		fmt.Fprintf(w, "APP_ENV=%s\n", os.Getenv("APP_ENV"))
 		fmt.Fprintf(w, "DB_CONNECTION=%s\n", os.Getenv("DB_CONNECTION"))
